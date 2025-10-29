@@ -554,5 +554,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.1.0 loaded successfully!');
 });
