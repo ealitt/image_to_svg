@@ -152,6 +152,39 @@ function displaySVG(svgString, containerId) {
     container.innerHTML = svgString;
 }
 
+// Helper function to check if a color is dark (black/near-black)
+function isColorDark(colorString) {
+    if (!colorString) return false;
+
+    // Handle hex colors
+    if (colorString.startsWith('#')) {
+        const hex = colorString.substring(1);
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const brightness = (r + g + b) / 3;
+        return brightness < 128;
+    }
+
+    // Handle rgb/rgba colors
+    if (colorString.startsWith('rgb')) {
+        const match = colorString.match(/\d+/g);
+        if (match && match.length >= 3) {
+            const r = parseInt(match[0]);
+            const g = parseInt(match[1]);
+            const b = parseInt(match[2]);
+            const brightness = (r + g + b) / 3;
+            return brightness < 128;
+        }
+    }
+
+    // Handle named colors
+    if (colorString === 'black') return true;
+    if (colorString === 'white') return false;
+
+    return false;
+}
+
 function updateSVGStrokes() {
     if (!currentSVG) return;
 
@@ -168,11 +201,11 @@ function updateSVGStrokes() {
     paths.forEach((path, index) => {
         const fill = path.getAttribute('fill');
 
-        // Apply stroke based on fill color
-        if (fill === '#000000' || fill === 'black') {
+        // Apply stroke based on fill color brightness
+        if (isColorDark(fill)) {
             path.setAttribute('stroke', 'black');
             path.setAttribute('stroke-width', blackStroke);
-        } else if (fill === '#ffffff' || fill === 'white') {
+        } else {
             path.setAttribute('stroke', 'white');
             path.setAttribute('stroke-width', whiteStroke);
         }
@@ -568,5 +601,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter v1.2.0 loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.3.0 loaded successfully!');
 });
