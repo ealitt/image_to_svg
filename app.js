@@ -13,6 +13,8 @@ const ctx = imageCanvas.getContext('2d', { willReadFrequently: true });
 document.getElementById('imageInput').addEventListener('change', handleImageUpload);
 document.getElementById('brightness').addEventListener('input', updateImagePreview);
 document.getElementById('contrast').addEventListener('input', updateImagePreview);
+document.getElementById('greyscaleBtn').addEventListener('click', convertToGreyscale);
+document.getElementById('invertBtn').addEventListener('click', invertColors);
 
 // Step 2: SVG Conversion
 document.getElementById('convertToSVG').addEventListener('click', convertToSVG);
@@ -97,6 +99,86 @@ function updateImagePreview() {
     }
 
     ctx.putImageData(imageData, 0, 0);
+}
+
+function convertToGreyscale() {
+    if (!originalImage) {
+        alert('Please upload an image first!');
+        return;
+    }
+
+    // Get current canvas state
+    const imageData = ctx.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
+    const data = imageData.data;
+
+    // Convert to greyscale using luminance formula
+    for (let i = 0; i < data.length; i += 4) {
+        const grey = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        data[i] = grey;     // R
+        data[i + 1] = grey; // G
+        data[i + 2] = grey; // B
+        // Alpha channel (i + 3) remains unchanged
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Update the originalImage to reflect the greyscale conversion
+    // This ensures subsequent operations work with the greyscale version
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imageCanvas.width;
+    tempCanvas.height = imageCanvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(imageCanvas, 0, 0);
+
+    const img = new Image();
+    img.onload = function() {
+        originalImage = img;
+        // Reset sliders since we've baked in the changes
+        document.getElementById('brightness').value = 0;
+        document.getElementById('contrast').value = 0;
+        document.getElementById('brightnessValue').textContent = '0';
+        document.getElementById('contrastValue').textContent = '0';
+    };
+    img.src = tempCanvas.toDataURL();
+}
+
+function invertColors() {
+    if (!originalImage) {
+        alert('Please upload an image first!');
+        return;
+    }
+
+    // Get current canvas state
+    const imageData = ctx.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
+    const data = imageData.data;
+
+    // Invert each color channel
+    for (let i = 0; i < data.length; i += 4) {
+        data[i] = 255 - data[i];         // R
+        data[i + 1] = 255 - data[i + 1]; // G
+        data[i + 2] = 255 - data[i + 2]; // B
+        // Alpha channel (i + 3) remains unchanged
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Update the originalImage to reflect the inversion
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = imageCanvas.width;
+    tempCanvas.height = imageCanvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(imageCanvas, 0, 0);
+
+    const img = new Image();
+    img.onload = function() {
+        originalImage = img;
+        // Reset sliders since we've baked in the changes
+        document.getElementById('brightness').value = 0;
+        document.getElementById('contrast').value = 0;
+        document.getElementById('brightnessValue').textContent = '0';
+        document.getElementById('contrastValue').textContent = '0';
+    };
+    img.src = tempCanvas.toDataURL();
 }
 
 // ============================================
@@ -390,12 +472,17 @@ function createMeshFromSVG(svg) {
     const viewBox = svg.getAttribute('viewBox');
     const [minX, minY, width, height] = viewBox ? viewBox.split(' ').map(Number) : [0, 0, 100, 100];
 
-    // Create shape from SVG paths
+    // Create shapes from SVG paths - only extrude dark (black) paths
     const shapes = [];
 
     paths.forEach(path => {
         const d = path.getAttribute('d');
+        const fill = path.getAttribute('fill');
+
         if (!d) return;
+
+        // Only process dark/black paths - skip white/light paths
+        if (!isColorDark(fill)) return;
 
         try {
             const shape = createShapeFromPath(d, width, height);
@@ -408,7 +495,7 @@ function createMeshFromSVG(svg) {
     });
 
     if (shapes.length === 0) {
-        alert('No valid paths found in SVG');
+        alert('No valid dark paths found in SVG to extrude');
         return;
     }
 
@@ -453,12 +540,16 @@ function createMeshFromSVG(svg) {
 
     stlMesh = new THREE.Mesh(mergedGeometry, material);
 
-    // Center the mesh
+    // Position mesh to sit flat on XY plane
     stlMesh.geometry.computeBoundingBox();
     const box = stlMesh.geometry.boundingBox;
+
+    // Center X and Y, but place Z so bottom sits on Z=0 plane
     const center = new THREE.Vector3();
     box.getCenter(center);
-    stlMesh.position.sub(center);
+    stlMesh.position.x = -center.x;
+    stlMesh.position.y = -center.y;
+    stlMesh.position.z = -box.min.z;  // Place bottom of mesh at Z=0
 
     scene.add(stlMesh);
 
@@ -617,5 +708,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter v1.4.0 loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.5.0 loaded successfully!');
 });
