@@ -8,6 +8,35 @@ let stlMesh = null;
 // Canvas elements
 const imageCanvas = document.getElementById('imageCanvas');
 const ctx = imageCanvas.getContext('2d', { willReadFrequently: true });
+const originalCanvas = document.getElementById('originalCanvas');
+const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
+
+// Tab switching functionality
+document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+        const targetTab = button.getAttribute('data-tab');
+        switchTab(targetTab);
+    });
+});
+
+function switchTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Show selected tab
+    document.getElementById(tabId).classList.add('active');
+    document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+
+    // Initialize 3D viewer if switching to 3D tab and not already initialized
+    if (tabId === '3d-tab' && !renderer) {
+        init3DViewer();
+    }
+}
 
 // Step 1: Image Upload and Editing
 document.getElementById('imageInput').addEventListener('change', handleImageUpload);
@@ -17,18 +46,22 @@ document.getElementById('greyscaleBtn').addEventListener('click', convertToGreys
 document.getElementById('invertBtn').addEventListener('click', invertColors);
 
 // Step 2: SVG Conversion
-document.getElementById('convertToSVG').addEventListener('click', convertToSVG);
+document.getElementById('convertToSVG').addEventListener('click', () => {
+    convertToSVG();
+    switchTab('svg-tab');
+});
 document.getElementById('threshold').addEventListener('input', convertToSVG);
 document.getElementById('strokeWidth').addEventListener('input', updateSVGStrokes);
 
 // Step 3: Re-conversion
 document.getElementById('reconvertSVG').addEventListener('click', reconvertSVGPipeline);
-document.getElementById('reconvertThreshold').addEventListener('input', reconvertSVGPipeline);
 
 // Step 4: 3D STL
-document.getElementById('convertToSTL').addEventListener('click', convertToSTL);
+document.getElementById('convertToSTL').addEventListener('click', () => {
+    convertToSTL();
+    switchTab('3d-tab');
+});
 document.getElementById('depth').addEventListener('input', updateSTLDepth);
-document.getElementById('bevel').addEventListener('input', updateSTLDepth);
 document.getElementById('downloadSTL').addEventListener('click', downloadSTL);
 
 // Update slider value displays
@@ -36,7 +69,13 @@ document.querySelectorAll('input[type="range"]').forEach(slider => {
     slider.addEventListener('input', (e) => {
         const valueSpan = document.getElementById(e.target.id + 'Value');
         if (valueSpan) {
-            valueSpan.textContent = e.target.value;
+            let value = e.target.value;
+            // Add unit for depth
+            if (e.target.id === 'depth') {
+                valueSpan.textContent = value;
+            } else {
+                valueSpan.textContent = value;
+            }
         }
     });
 });
@@ -58,9 +97,20 @@ function handleImageUpload(e) {
             // Set canvas size to match image
             const maxWidth = 800;
             const scale = Math.min(1, maxWidth / img.width);
-            imageCanvas.width = img.width * scale;
-            imageCanvas.height = img.height * scale;
 
+            // Set both canvases to same size
+            const canvasWidth = img.width * scale;
+            const canvasHeight = img.height * scale;
+
+            imageCanvas.width = canvasWidth;
+            imageCanvas.height = canvasHeight;
+            originalCanvas.width = canvasWidth;
+            originalCanvas.height = canvasHeight;
+
+            // Draw original image to "before" canvas
+            originalCtx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+
+            // Draw to "after" canvas with current adjustments
             updateImagePreview();
         };
         img.src = event.target.result;
@@ -224,6 +274,9 @@ function convertToSVG() {
         mincolorratio: 0,
         colorquantcycles: 3
     });
+
+    // Display in both before and after previews
+    displaySVG(currentSVG, 'svgPreviewBefore');
     displaySVG(currentSVG, 'svgPreview');
     updateSVGStrokes();
 }
@@ -341,9 +394,9 @@ function reconvertSVGPipeline() {
         tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
         tempCtx.drawImage(img, 0, 0);
 
-        // Apply threshold
+        // Apply threshold (use same threshold as initial conversion)
         const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        const threshold = parseInt(document.getElementById('reconvertThreshold').value);
+        const threshold = parseInt(document.getElementById('threshold').value);
 
         for (let i = 0; i < imageData.data.length; i += 4) {
             const gray = (imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2]) / 3;
@@ -366,7 +419,14 @@ function reconvertSVGPipeline() {
             mincolorratio: 0,
             colorquantcycles: 3
         });
-        displaySVG(reconvertedSVG, 'reconvertedSVGPreview');
+
+        // Update currentSVG with reconverted version
+        currentSVG = reconvertedSVG;
+        displaySVG(reconvertedSVG, 'svgPreview');
+
+        // Reset stroke width
+        document.getElementById('strokeWidth').value = 0;
+        document.getElementById('strokeWidthValue').textContent = '0';
 
         URL.revokeObjectURL(url);
     };
@@ -396,7 +456,8 @@ function init3DViewer() {
         0.1,
         1000
     );
-    camera.position.z = 50;
+    camera.position.set(0, -50, 50);
+    camera.lookAt(0, 0, 0);
 
     // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -416,8 +477,9 @@ function init3DViewer() {
     directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
 
-    // Grid
+    // Grid on XY plane (rotated to show Z as up)
     const gridHelper = new THREE.GridHelper(100, 20);
+    gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
     // Animation loop
@@ -445,7 +507,7 @@ function convertToSTL() {
         return;
     }
 
-    const container = document.getElementById(reconvertedSVG ? 'reconvertedSVGPreview' : 'svgPreview');
+    const container = document.getElementById('svgPreview');
     const svg = container.querySelector('svg');
 
     if (!svg) return;
@@ -466,7 +528,6 @@ function convertToSTL() {
 function createMeshFromSVG(svg) {
     const paths = svg.querySelectorAll('path');
     const depth = parseFloat(document.getElementById('depth').value);
-    const bevel = parseFloat(document.getElementById('bevel').value);
 
     // Get SVG dimensions
     const viewBox = svg.getAttribute('viewBox');
@@ -499,13 +560,10 @@ function createMeshFromSVG(svg) {
         return;
     }
 
-    // Create geometry with extrusion
+    // Create geometry with extrusion (no bevel)
     const extrudeSettings = {
         depth: depth,
-        bevelEnabled: bevel > 0,
-        bevelThickness: bevel,
-        bevelSize: bevel,
-        bevelSegments: 3
+        bevelEnabled: false
     };
 
     const geometries = shapes.map(shape => new THREE.ExtrudeGeometry(shape, extrudeSettings));
@@ -540,16 +598,20 @@ function createMeshFromSVG(svg) {
 
     stlMesh = new THREE.Mesh(mergedGeometry, material);
 
+    // Rotate mesh 90 degrees on X axis so it lays flat
+    stlMesh.rotation.x = Math.PI / 2;
+
     // Position mesh to sit flat on XY plane
     stlMesh.geometry.computeBoundingBox();
     const box = stlMesh.geometry.boundingBox;
 
-    // Center X and Y, but place Z so bottom sits on Z=0 plane
+    // After rotation, we need to adjust positioning
+    // Center X and Y, place at Z=0
     const center = new THREE.Vector3();
     box.getCenter(center);
     stlMesh.position.x = -center.x;
     stlMesh.position.y = -center.y;
-    stlMesh.position.z = -box.min.z;  // Place bottom of mesh at Z=0
+    stlMesh.position.z = 0;
 
     scene.add(stlMesh);
 
@@ -557,7 +619,8 @@ function createMeshFromSVG(svg) {
     const size = new THREE.Vector3();
     box.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z);
-    camera.position.z = maxDim * 2;
+    camera.position.set(0, -maxDim * 2, maxDim * 1.5);
+    camera.lookAt(0, 0, 0);
 }
 
 function createShapeFromPath(d, svgWidth, svgHeight) {
@@ -708,5 +771,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter v1.5.0 loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.6.0 loaded successfully!');
 });
