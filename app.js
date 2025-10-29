@@ -130,14 +130,21 @@ function convertToSVG() {
 
     tempCtx.putImageData(imageData, 0, 0);
 
-    // Use Potrace to convert to SVG
-    Potrace.loadImageFromCanvas(tempCanvas, function() {
-        Potrace.process(function() {
-            currentSVG = Potrace.getSVG(1);
-            displaySVG(currentSVG, 'svgPreview');
-            updateSVGStrokes();
-        });
+    // Use ImageTracer to convert to SVG
+    const imgd = ImageTracer.getImgdata(tempCanvas);
+    currentSVG = ImageTracer.imagedataToSVG(imgd, {
+        ltres: 1,
+        qtres: 1,
+        pathomit: 8,
+        scale: 1,
+        strokewidth: 1,
+        linefilter: false,
+        numberofcolors: 2,
+        mincolorratio: 0,
+        colorquantcycles: 3
     });
+    displaySVG(currentSVG, 'svgPreview');
+    updateSVGStrokes();
 }
 
 function displaySVG(svgString, containerId) {
@@ -221,13 +228,20 @@ function reconvertSVGPipeline() {
 
         tempCtx.putImageData(imageData, 0, 0);
 
-        // Convert back to SVG using Potrace
-        Potrace.loadImageFromCanvas(tempCanvas, function() {
-            Potrace.process(function() {
-                reconvertedSVG = Potrace.getSVG(1);
-                displaySVG(reconvertedSVG, 'reconvertedSVGPreview');
-            });
+        // Convert back to SVG using ImageTracer
+        const imgd = ImageTracer.getImgdata(tempCanvas);
+        reconvertedSVG = ImageTracer.imagedataToSVG(imgd, {
+            ltres: 1,
+            qtres: 1,
+            pathomit: 8,
+            scale: 1,
+            strokewidth: 1,
+            linefilter: false,
+            numberofcolors: 2,
+            mincolorratio: 0,
+            colorquantcycles: 3
         });
+        displaySVG(reconvertedSVG, 'reconvertedSVGPreview');
 
         URL.revokeObjectURL(url);
     };
@@ -554,5 +568,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter v1.1.0 loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.2.0 loaded successfully!');
 });
