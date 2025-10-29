@@ -17,8 +17,7 @@ document.getElementById('contrast').addEventListener('input', updateImagePreview
 // Step 2: SVG Conversion
 document.getElementById('convertToSVG').addEventListener('click', convertToSVG);
 document.getElementById('threshold').addEventListener('input', convertToSVG);
-document.getElementById('blackStroke').addEventListener('input', updateSVGStrokes);
-document.getElementById('whiteStroke').addEventListener('input', updateSVGStrokes);
+document.getElementById('strokeWidth').addEventListener('input', updateSVGStrokes);
 
 // Step 3: Re-conversion
 document.getElementById('reconvertSVG').addEventListener('click', reconvertSVGPipeline);
@@ -188,8 +187,7 @@ function isColorDark(colorString) {
 function updateSVGStrokes() {
     if (!currentSVG) return;
 
-    const blackStroke = parseFloat(document.getElementById('blackStroke').value);
-    const whiteStroke = parseFloat(document.getElementById('whiteStroke').value);
+    const strokeWidth = parseFloat(document.getElementById('strokeWidth').value);
 
     const container = document.getElementById('svgPreview');
     const svg = container.querySelector('svg');
@@ -200,19 +198,31 @@ function updateSVGStrokes() {
     const paths = svg.querySelectorAll('path');
     paths.forEach((path, index) => {
         const fill = path.getAttribute('fill');
+        const isDark = isColorDark(fill);
 
-        // Apply stroke based on fill color brightness
-        if (isColorDark(fill)) {
-            path.setAttribute('stroke', 'black');
-            path.setAttribute('stroke-width', blackStroke);
+        // Erosion/Dilation logic:
+        // Positive strokeWidth = dilate (stroke matches fill color, expands shape)
+        // Negative strokeWidth = erode (stroke is opposite color, shrinks shape)
+        // Zero = no stroke
+
+        if (strokeWidth === 0) {
+            path.setAttribute('stroke', 'none');
+            path.setAttribute('stroke-width', '0');
         } else {
-            path.setAttribute('stroke', 'white');
-            path.setAttribute('stroke-width', whiteStroke);
-        }
+            const absStrokeWidth = Math.abs(strokeWidth);
 
-        // Set stroke-linejoin for better appearance
-        path.setAttribute('stroke-linejoin', 'round');
-        path.setAttribute('stroke-linecap', 'round');
+            if (strokeWidth > 0) {
+                // Dilate: stroke matches fill color
+                path.setAttribute('stroke', isDark ? 'black' : 'white');
+            } else {
+                // Erode: stroke is opposite of fill color
+                path.setAttribute('stroke', isDark ? 'white' : 'black');
+            }
+
+            path.setAttribute('stroke-width', absStrokeWidth);
+            path.setAttribute('stroke-linejoin', 'round');
+            path.setAttribute('stroke-linecap', 'round');
+        }
     });
 }
 
@@ -413,7 +423,7 @@ function createMeshFromSVG(svg) {
 
     const geometries = shapes.map(shape => new THREE.ExtrudeGeometry(shape, extrudeSettings));
 
-    // Merge geometries
+    // Merge geometries - avoid spread operator to prevent stack overflow
     const mergedGeometry = new THREE.BufferGeometry();
     const positions = [];
     const normals = [];
@@ -421,8 +431,14 @@ function createMeshFromSVG(svg) {
     geometries.forEach(geom => {
         const pos = geom.attributes.position.array;
         const norm = geom.attributes.normal.array;
-        positions.push(...pos);
-        normals.push(...norm);
+
+        // Use loop instead of spread operator to avoid stack overflow with large arrays
+        for (let i = 0; i < pos.length; i++) {
+            positions.push(pos[i]);
+        }
+        for (let i = 0; i < norm.length; i++) {
+            normals.push(norm[i]);
+        }
     });
 
     mergedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -601,5 +617,5 @@ function generateSTLString(geometry) {
 
 // Initialize on load
 window.addEventListener('load', () => {
-    console.log('Image to SVG to STL Converter v1.3.0 loaded successfully!');
+    console.log('Image to SVG to STL Converter v1.4.0 loaded successfully!');
 });
